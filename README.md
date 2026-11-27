@@ -1,5 +1,49 @@
 # React + TypeScript + Vite
 
+## Web app
+
+The React app in `src/` is the sign-up, log-in and home UI for the [auth API](#api-endpoints). Run it together with the API with `npm run dev:all` (see [Setup](#setup)); Vite proxies `/api` to the API, so the session cookie stays same-origin.
+
+### Pages
+
+| Route     | Who can see it | What it does |
+| --------- | -------------- | ------------ |
+| `/`       | signed-in users | Shows "Signed in as {name} ({email})" and a **Log out** button that ends the session and returns to `/login` |
+| `/login`  | signed-out users | Email + password form; links to `/signup` |
+| `/signup` | signed-out users | Name + email + password form; links to `/login` |
+| anything else | everyone | Redirects to `/` |
+
+Signed-out visitors to `/` are sent to `/login`, and signed-in visitors to `/login` or `/signup` are sent to `/`. On load the app calls `GET /api/auth/me` to restore the session, so a refresh keeps you signed in; a "Loading…" status is shown until that answers. If the check fails for any reason the user is treated as signed out. If logout fails, the user stays signed in and sees an error, because the server session still exists.
+
+### Forms and errors
+
+- Inputs are validated in the browser with the same rules and messages as the server (`src/auth/validation.ts` mirrors `server/src/auth/schemas.ts`; change both together). Invalid input shows an error under the field and focuses it, and nothing is sent.
+- Email is trimmed and lower-cased before it is sent, and name is trimmed. Passwords are sent as typed.
+- Server field errors (`400 VALIDATION_ERROR`) appear under their fields, and `409 EMAIL_TAKEN` appears under Email. Everything else (`401 INVALID_CREDENTIALS`, `429 RATE_LIMITED`, network failures, unexpected responses) is shown in a `role="alert"` region at the top of the form.
+- Accessibility: every input has a `<label>`, `aria-invalid` and `aria-describedby` pointing at its error, and the autocomplete hints `name`, `email`, `current-password` (login) and `new-password` (signup). The submit button is disabled while a request is in flight.
+
+### Code layout
+
+| Path | Purpose |
+| ---- | ------- |
+| `src/api/client.ts` | `request<T>()`: a `fetch` wrapper that never throws and returns `Result<T>` (`{ ok: true, data }` or `{ ok: false, error: { code, message, fields? } }`). Network failures become `NETWORK_ERROR`, non-JSON or off-contract responses (e.g. a proxy error page) become `UNEXPECTED_RESPONSE`, and `INTERNAL_ERROR` details are replaced by a generic message. Every non-GET request sends `Content-Type: application/json`, which the server's CSRF guard requires. |
+| `src/api/auth.ts` | `signup`, `login`, `logout`, `me` and the `PublicUser`, `SignupInput`, `LoginInput` types, mirroring the server contract. |
+| `src/auth/` | `AuthProvider` (state: `loading`, `authenticated` with `user`, or `anonymous`), the `useAuth()` hook, and the `RequireAuth` / `RedirectIfAuthenticated` layout routes. |
+| `src/forms/useForm.ts` | Shared form state: validate locally, submit, then place server errors under fields or in the alert. Map a single-field error code to its field with `fieldForErrorCode` (e.g. `{ EMAIL_TAKEN: 'email' }`). |
+| `src/components/` | `FormField` (labelled input with error and hint wiring) and `AuthCard` (the centred card layout). |
+| `src/pages/` | `LoginPage`, `SignupPage`, `HomePage`. |
+| `src/main.tsx`, `src/App.tsx` | `main.tsx` mounts `BrowserRouter` and `AuthProvider`; `App.tsx` is only the route table. |
+
+Styling is plain CSS (`src/index.css`, `src/App.css`).
+
+### Web tests
+
+`npm run test:web` runs `src/**/*.test.{ts,tsx}` in jsdom with Testing Library (setup in `src/test/setup.ts`). No database is needed. Tests do not mock modules: `AuthProvider` accepts an optional `api` prop, and `renderApp(route, api)` from `src/test/renderApp.tsx` renders the whole app in a `MemoryRouter` against `createFakeAuthApi()`, whose calls you can stub per test. Use `deferred()` from the same file to hold a request open and check in-flight states.
+
+### Troubleshooting
+
+If another app already uses port 5173, Vite silently starts on 5174 instead. The browser then sends `Origin: http://localhost:5174`, which does not match `APP_ORIGIN`, so signup, login and logout all fail with `403 CSRF_REJECTED`. Set `APP_ORIGIN` to the URL Vite printed, or free port 5173.
+
 ## Backend & database
 
 The API is an Express 5 + PostgreSQL server in `server/`, sharing the root `package.json`.
@@ -51,7 +95,9 @@ The server validates its environment at start-up (`server/src/config.ts`) and ex
 | `npm run db:migrate`             | Applies pending migrations                                      |
 | `npm run db:migrate:down`        | Reverts the most recent migration                               |
 | `npm run db:migrate:create name` | Creates a new SQL migration in `server/migrations/`             |
-| `npm test` / `npm run test:server` | Runs the Vitest suite(s); server tests need `TEST_DATABASE_URL` |
+| `npm test`                       | Runs both Vitest projects (`server` and `web`); needs `TEST_DATABASE_URL` |
+| `npm run test:server`            | Server tests only; needs `TEST_DATABASE_URL` and the database   |
+| `npm run test:web`               | Web tests only (jsdom); no database needed                      |
 
 ### Migrations
 
@@ -101,7 +147,7 @@ Cookie-based sessions, implemented in `server/src/auth/`.
 
 ### Tests
 
-`npm run test:server` migrates `TEST_DATABASE_URL` once (Vitest global setup) and runs `server/**/*.test.ts` serially. Use `createTestDb()` and `truncateAll(db)` from `server/test/db.ts` to get a clean database per test. Build the app with `loadConfig({ ..., AUTH_RATE_LIMIT_MAX: '0' })` to switch the rate limiter off, and pass a fake `passwordHasher` to `createApp` when a test does not need real argon2 hashing.
+For the web app's tests see [Web tests](#web-tests). `npm run test:server` migrates `TEST_DATABASE_URL` once (Vitest global setup) and runs `server/**/*.test.ts` serially. Use `createTestDb()` and `truncateAll(db)` from `server/test/db.ts` to get a clean database per test. Build the app with `loadConfig({ ..., AUTH_RATE_LIMIT_MAX: '0' })` to switch the rate limiter off, and pass a fake `passwordHasher` to `createApp` when a test does not need real argon2 hashing.
 
 ### Error responses
 
