@@ -22,6 +22,8 @@ curl localhost:3001/api/health   # {"status":"ok"}
 
 If port 5432 is already in use, set `POSTGRES_PORT` (e.g. `POSTGRES_PORT=55432 npm run db:up`) and update the port in `DATABASE_URL` / `TEST_DATABASE_URL`.
 
+To stop the database and delete its data, run `docker compose down -v`. The next `npm run db:up` recreates both databases, so run `npm run db:migrate` again afterwards.
+
 ### Configuration
 
 The server validates its environment at start-up (`server/src/config.ts`) and exits with a readable error if anything is invalid.
@@ -41,7 +43,8 @@ The server validates its environment at start-up (`server/src/config.ts`) and ex
 | -------------------------------- | --------------------------------------------------------------- |
 | `npm run dev:server`             | API with reload (`tsx watch`)                                   |
 | `npm run dev:all`                | Web app and API together                                        |
-| `npm run build:server`           | Compiles the API to `dist-server/`; run it with `start:server`  |
+| `npm run build:server`           | Compiles the API to `dist-server/`                              |
+| `npm run start:server`           | Runs the compiled API from `dist-server/`                       |
 | `npm run db:up`                  | `docker compose up -d`, waits until postgres is healthy         |
 | `npm run db:migrate`             | Applies pending migrations                                      |
 | `npm run db:migrate:down`        | Reverts the most recent migration                               |
@@ -51,6 +54,19 @@ The server validates its environment at start-up (`server/src/config.ts`) and ex
 ### Migrations
 
 Migrations are plain SQL files in `server/migrations/`, run by [node-pg-migrate](https://salsita.github.io/node-pg-migrate/). Each file has a `-- Up Migration` and a `-- Down Migration` section. Write them so the previous app version keeps working while they run (add first, remove in a later release).
+
+The first migration creates:
+
+- `users`: `id` (uuid, generated), `email`, `name`, `password_hash`, `created_at`, `updated_at`. `email` is unique and must be stored lower-case (a check constraint rejects anything else), so normalise it before you insert it.
+- `sessions`: `id_hash` (bytea primary key, a hash of the session token; the raw token is never stored), `user_id` (references `users`, deleted together with the user), `expires_at`, `created_at`. Both `user_id` and `expires_at` are indexed.
+
+### API endpoints
+
+| Method and path   | Response                                                                          |
+| ----------------- | --------------------------------------------------------------------------------- |
+| `GET /api/health` | `200 {"status":"ok"}` when the database answers, otherwise `503 SERVICE_UNAVAILABLE` |
+
+Unknown routes return `404` with the error shape below. JSON request bodies are limited to 10 kB.
 
 ### Tests
 
