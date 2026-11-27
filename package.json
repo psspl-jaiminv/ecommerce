@@ -4,9 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/check-deps.mjs",
     "dev": "vite",
+    "predev:server": "node scripts/check-deps.mjs",
     "dev:server": "tsx watch --clear-screen=false server/src/index.ts",
     "dev:all": "concurrently --kill-others-on-fail --names web,api --prefix-colors cyan,magenta \"npm:dev\" \"npm:dev:server\"",
+    "prebuild": "node scripts/check-deps.mjs",
     "build": "tsc -b && vite build",
     "build:server": "tsc -p tsconfig.server.build.json",
     "start:server": "node --enable-source-maps dist-server/index.js",

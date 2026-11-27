@@ -42,6 +42,8 @@ Styling is plain CSS (`src/index.css`, `src/App.css`).
 
 ### Troubleshooting
 
+`npm run dev`, `npm run dev:server` and `npm run build` first run `scripts/check-deps.mjs`, which stops with "Dependencies are not installed … Run `npm install`" if any package from `package.json` is missing from `node_modules`. Without that check, a `vite` from somewhere else on your `PATH` would start and fail with `Cannot find package 'vite' imported from …/vite.config.ts`. Run `npm install` (or `npm ci`) and try again. You also need to do this after pulling changes that add a dependency.
+
 If another app already uses port 5173, Vite silently starts on 5174 instead. The browser then sends `Origin: http://localhost:5174`, which does not match `APP_ORIGIN`, so signup, login and logout all fail with `403 CSRF_REJECTED`. Set `APP_ORIGIN` to the URL Vite printed, or free port 5173.
 
 ## Backend & database
@@ -95,9 +97,10 @@ The server validates its environment at start-up (`server/src/config.ts`) and ex
 | `npm run db:migrate`             | Applies pending migrations                                      |
 | `npm run db:migrate:down`        | Reverts the most recent migration                               |
 | `npm run db:migrate:create name` | Creates a new SQL migration in `server/migrations/`             |
-| `npm test`                       | Runs both Vitest projects (`server` and `web`); needs `TEST_DATABASE_URL` |
+| `npm test`                       | Runs all Vitest projects (`server`, `web` and `scripts`); needs `TEST_DATABASE_URL` |
 | `npm run test:server`            | Server tests only; needs `TEST_DATABASE_URL` and the database   |
 | `npm run test:web`               | Web tests only (jsdom); no database needed                      |
+| `npx vitest run --project scripts` | Tests for `scripts/` (dependency check); no database needed   |
 
 ### Migrations
 
