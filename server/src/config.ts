@@ -41,6 +41,20 @@ const envSchema = z
         .positive({ error: 'must be a positive number of days' })
         .default(7),
     ),
+    AUTH_RATE_LIMIT_MAX: unsetIfEmpty(
+      z.coerce
+        .number({ error: 'must be a number' })
+        .int({ error: 'must be an integer' })
+        .min(0, { error: 'must be 0 (disabled) or a positive number of requests' })
+        .default(10),
+    ),
+    AUTH_RATE_LIMIT_WINDOW_MINUTES: unsetIfEmpty(
+      z.coerce
+        .number({ error: 'must be a number' })
+        .int({ error: 'must be an integer' })
+        .positive({ error: 'must be a positive number of minutes' })
+        .default(15),
+    ),
   })
   .transform((env) => ({
     databaseUrl: env.DATABASE_URL,
@@ -48,7 +62,22 @@ const envSchema = z
     nodeEnv: env.NODE_ENV,
     appOrigin: env.APP_ORIGIN,
     sessionTtlDays: env.SESSION_TTL_DAYS,
+    authRateLimit: toRateLimitConfig(
+      env.AUTH_RATE_LIMIT_MAX,
+      env.AUTH_RATE_LIMIT_WINDOW_MINUTES,
+    ),
   }))
+
+/** Per-IP request limit for the signup and login endpoints. */
+export type RateLimitConfig =
+  | { readonly enabled: false }
+  | { readonly enabled: true; readonly limit: number; readonly windowMs: number }
+
+function toRateLimitConfig(limit: number, windowMinutes: number): RateLimitConfig {
+  return limit === 0
+    ? { enabled: false }
+    : { enabled: true, limit, windowMs: windowMinutes * 60_000 }
+}
 
 export type Config = Readonly<z.output<typeof envSchema>>
 export type NodeEnv = Config['nodeEnv']
