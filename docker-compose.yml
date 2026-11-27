@@ -1,0 +1,25 @@
+# Local development database. Not for production use.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+    ports:
+      # Bound to localhost only. Override the host port with POSTGRES_PORT if 5432 is taken.
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 01-create-databases.sql creates the `app` and `app_test` databases.
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Probe over TCP so the check only passes once the init scripts have run
+      # (during initialisation postgres listens on the unix socket only).
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d app_test']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+volumes:
+  pgdata:
