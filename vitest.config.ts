@@ -1,3 +1,4 @@
+import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
@@ -12,6 +13,15 @@ export default defineConfig({
           globalSetup: ['server/test/global-setup.ts'],
           // Test files share one database and truncate it, so run them serially.
           fileParallelism: false,
+        },
+      },
+      {
+        plugins: [react()],
+        test: {
+          name: 'web',
+          environment: 'jsdom',
+          include: ['src/**/*.test.{ts,tsx}'],
+          setupFiles: ['src/test/setup.ts'],
         },
       },
     ],
