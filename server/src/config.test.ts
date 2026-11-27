@@ -11,6 +11,7 @@ describe('loadConfig', () => {
       nodeEnv: 'development',
       appOrigin: 'http://localhost:5173',
       sessionTtlDays: 7,
+      authRateLimit: { enabled: true, limit: 10, windowMs: 15 * 60_000 },
     })
   })
 
@@ -21,6 +22,8 @@ describe('loadConfig', () => {
       NODE_ENV: 'production',
       APP_ORIGIN: 'https://shop.example.com',
       SESSION_TTL_DAYS: '30',
+      AUTH_RATE_LIMIT_MAX: '5',
+      AUTH_RATE_LIMIT_WINDOW_MINUTES: '1',
     })
 
     expect(config).toMatchObject({
@@ -28,6 +31,13 @@ describe('loadConfig', () => {
       nodeEnv: 'production',
       appOrigin: 'https://shop.example.com',
       sessionTtlDays: 30,
+      authRateLimit: { enabled: true, limit: 5, windowMs: 60_000 },
+    })
+  })
+
+  it('disables the auth rate limit when AUTH_RATE_LIMIT_MAX is 0', () => {
+    expect(loadConfig({ DATABASE_URL, AUTH_RATE_LIMIT_MAX: '0' }).authRateLimit).toEqual({
+      enabled: false,
     })
   })
 
@@ -56,6 +66,8 @@ describe('loadConfig', () => {
         NODE_ENV: 'staging',
         APP_ORIGIN: 'not a url',
         SESSION_TTL_DAYS: '0',
+        AUTH_RATE_LIMIT_MAX: '-1',
+        AUTH_RATE_LIMIT_WINDOW_MINUTES: '0',
       })
     } catch (err) {
       error = err
@@ -68,6 +80,8 @@ describe('loadConfig', () => {
       'NODE_ENV: must be one of development, test, production',
       'APP_ORIGIN: must be an http(s) URL',
       'SESSION_TTL_DAYS: must be a positive number of days',
+      'AUTH_RATE_LIMIT_MAX: must be 0 (disabled) or a positive number of requests',
+      'AUTH_RATE_LIMIT_WINDOW_MINUTES: must be a positive number of minutes',
     ])
   })
 })

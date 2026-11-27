@@ -1,9 +1,14 @@
 import express, { type Express } from 'express'
 import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
+import {
+  EmailTakenError,
+  InvalidCredentialsError,
+  UnauthenticatedError,
+} from '../auth/errors.js'
 import type { NodeEnv } from '../config.js'
 import type { Logger } from '../logger.js'
-import { createErrorHandler, HttpError, notFoundHandler } from './errors.js'
+import { createErrorHandler, HttpError, notFoundHandler, ValidationError } from './errors.js'
 
 function appThatThrows(error: unknown, nodeEnv: NodeEnv, logger: Logger): Express {
   const app = express()
@@ -80,6 +85,35 @@ describe('createErrorHandler', () => {
 
     expect(res.status).toBe(500)
     expect(res.body.error.message).toBe('Internal server error')
+  })
+})
+
+describe('createErrorHandler domain and validation errors', () => {
+  it.each([
+    [new EmailTakenError(), 409, 'EMAIL_TAKEN'],
+    [new InvalidCredentialsError(), 401, 'INVALID_CREDENTIALS'],
+    [new UnauthenticatedError(), 401, 'UNAUTHENTICATED'],
+  ])('maps %s to its status and code without logging', async (error, status, code) => {
+    const logger = fakeLogger()
+    const app = appThatThrows(error, 'production', logger)
+
+    const res = await request(app).get('/boom')
+
+    expect(res.status).toBe(status)
+    expect(res.body).toEqual({ error: { code, message: error.message } })
+    expect(logger.error).not.toHaveBeenCalled()
+  })
+
+  it('includes per-field messages for ValidationError', async () => {
+    const fields = { email: ['Enter a valid email address'] }
+    const app = appThatThrows(new ValidationError('Invalid body', fields), 'production', fakeLogger())
+
+    const res = await request(app).get('/boom')
+
+    expect(res.status).toBe(400)
+    expect(res.body).toEqual({
+      error: { code: 'VALIDATION_ERROR', message: 'Invalid body', fields },
+    })
   })
 })
 
