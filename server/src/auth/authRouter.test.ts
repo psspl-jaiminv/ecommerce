@@ -234,6 +234,17 @@ describe('GET /api/auth/me', () => {
 
     expect(res.status).toBe(401)
   })
+
+  it('returns 401 when the stored token hash is replayed as the cookie', async () => {
+    await signup()
+    const { rows } = await db.query<{ id_hash: Buffer }>('SELECT id_hash FROM sessions')
+    const storedHash = rows[0]?.id_hash
+    if (!storedHash) throw new Error('signup did not create a session')
+
+    for (const encoding of ['base64url', 'hex'] as const) {
+      expect((await me(storedHash.toString(encoding))).status).toBe(401)
+    }
+  })
 })
 
 describe('POST /api/auth/logout', () => {
@@ -309,6 +320,21 @@ describe('CSRF guard', () => {
     const res = await request(app).post('/api/auth/logout').set('Cookie', `sid=${sid}`)
 
     expect(res.status).toBe(403)
+    expect((await me(sid)).status).toBe(200)
+  })
+
+  it('rejects a cross-origin logout with 403, keeping the session alive', async () => {
+    const sid = sidValue(await signup())
+
+    const res = await request(app)
+      .post('/api/auth/logout')
+      .set('Content-Type', 'application/json')
+      .set('Origin', 'https://evil.example.com')
+      .set('Cookie', `sid=${sid}`)
+
+    expect(res.status).toBe(403)
+    expect(res.body.error.code).toBe('CSRF_REJECTED')
+    expect(sidCookie(res)).toBeUndefined()
     expect((await me(sid)).status).toBe(200)
   })
 })
