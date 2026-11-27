@@ -100,6 +100,7 @@ The server validates its environment at start-up (`server/src/config.ts`) and ex
 | `npm test`                       | Runs all Vitest projects (`server`, `web` and `scripts`); needs `TEST_DATABASE_URL` |
 | `npm run test:server`            | Server tests only; needs `TEST_DATABASE_URL` and the database   |
 | `npm run test:web`               | Web tests only (jsdom); no database needed                      |
+| `npx vitest run --project scripts` | Tests for `scripts/` (dependency check); no database needed   |
 
 ### Migrations
 
