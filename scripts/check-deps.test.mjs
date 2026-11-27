@@ -1,6 +1,16 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   checkDependencies,
@@ -90,6 +100,96 @@ describe('checkDependencies', () => {
     expect(installedIn(root)('@vitejs/plugin-react')).toBe(true)
     expect(checkDependencies({ root, logger })).toBe(0)
     expect(errors).toEqual([])
+  })
+})
+
+// Runs the real script as a process, the way npm's pre-scripts do: the script's own
+// location defines the project root, and the exit code decides whether npm continues.
+describe('command line (as run by npm pre-scripts)', () => {
+  const scriptSource = fileURLToPath(new URL('./check-deps.mjs', import.meta.url))
+  /** @type {string} */
+  let root
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'check-deps-cli-'))
+    mkdirSync(join(root, 'scripts'))
+    copyFileSync(scriptSource, join(root, 'scripts', 'check-deps.mjs'))
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'fixture',
+        private: true,
+        scripts: {
+          prebuild: 'node scripts/check-deps.mjs',
+          build: 'node -e "require(\'fs\').writeFileSync(\'built\', \'\')"',
+        },
+        devDependencies: { vite: '^8' },
+      }),
+    )
+  })
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  function installVite() {
+    const dir = join(root, 'node_modules', 'vite')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'vite' }))
+  }
+
+  /** @param {string} cwd */
+  function runScript(cwd) {
+    return spawnSync(process.execPath, ['scripts/check-deps.mjs'], { cwd, encoding: 'utf8' })
+  }
+
+  it('exits 1 with the install hint when node_modules is missing (DG-4)', () => {
+    const result = runScript(root)
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('missing: vite')
+    expect(result.stderr).toContain('Run `npm install`')
+  })
+
+  it('exits 0 silently once dependencies are installed', () => {
+    installVite()
+
+    const result = runScript(root)
+
+    expect(result.status).toBe(0)
+    expect(result.stderr).toBe('')
+  })
+
+  it('resolves the project root from the script location, not the working directory', () => {
+    installVite()
+    const elsewhere = mkdtempSync(join(tmpdir(), 'check-deps-cwd-'))
+    try {
+      const result = spawnSync(process.execPath, [join(root, 'scripts', 'check-deps.mjs')], {
+        cwd: elsewhere,
+        encoding: 'utf8',
+      })
+
+      expect(result.status).toBe(0)
+    } finally {
+      rmSync(elsewhere, { recursive: true, force: true })
+    }
+  })
+
+  it('stops `npm run build` before the build step when dependencies are missing', () => {
+    const result = spawnSync('npm', ['run', 'build', '--silent'], { cwd: root, encoding: 'utf8' })
+
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('Run `npm install`')
+    expect(existsSync(join(root, 'built'))).toBe(false)
+  })
+
+  it('lets `npm run build` proceed when dependencies are installed', () => {
+    installVite()
+
+    const result = spawnSync('npm', ['run', 'build', '--silent'], { cwd: root, encoding: 'utf8' })
+
+    expect(result.status).toBe(0)
+    expect(existsSync(join(root, 'built'))).toBe(true)
   })
 })
 
