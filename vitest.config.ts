@@ -24,6 +24,13 @@ export default defineConfig({
           setupFiles: ['src/test/setup.ts'],
         },
       },
+      {
+        test: {
+          name: 'scripts',
+          environment: 'node',
+          include: ['scripts/**/*.test.mjs'],
+        },
+      },
     ],
   },
 })
